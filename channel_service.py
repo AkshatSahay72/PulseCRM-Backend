@@ -13,7 +13,11 @@ app = FastAPI(title="Xeno Mock Channel Service", version="1.0.0")
 
 import os
 
-CRM_CALLBACK_URL = os.getenv("CRM_CALLBACK_URL", "http://127.0.0.1:8000/api/v1/campaigns/callback")
+CRM_BACKEND_HOST = os.getenv("CRM_BACKEND_HOST")
+if CRM_BACKEND_HOST:
+    CRM_CALLBACK_URL = f"http://{CRM_BACKEND_HOST}/api/v1/campaigns/callback"
+else:
+    CRM_CALLBACK_URL = os.getenv("CRM_CALLBACK_URL", "http://127.0.0.1:8000/api/v1/campaigns/callback")
 
 class OutboundMessage(BaseModel):
     log_id: int

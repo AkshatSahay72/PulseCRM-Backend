@@ -1,5 +1,4 @@
 services:
-  # 1. Main FastAPI CRM Backend Web Service
   - type: web
     name: pulsecrm-backend
     env: python
@@ -7,17 +6,14 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        sync: false # User manually inputs this in Render Dashboard secrets
-      - key: GROQ_API_KEY
-        sync: false # User manually inputs this in Render Dashboard secrets
-      - key: CHANNEL_SERVICE_URL
-        fromService:
-          type: web
-          name: mock-channel-service
-          property: url
-        value: ${value}/send
+        sync: false
 
-  # 2. Standalone Mock Channel Service
+      - key: GROQ_API_KEY
+        sync: false
+
+      - key: CHANNEL_SERVICE_URL
+        sync: false
+
   - type: web
     name: mock-channel-service
     env: python
@@ -25,8 +21,4 @@ services:
     startCommand: uvicorn channel_service:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: CRM_CALLBACK_URL
-        fromService:
-          type: web
-          name: pulsecrm-backend
-          property: url
-        value: ${value}/api/v1/campaigns/callback
+        sync: false

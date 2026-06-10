@@ -11,7 +11,11 @@ from app.services.ai import ai_service
 
 logger = logging.getLogger("uvicorn.error")
 
-CHANNEL_SERVICE_URL = os.getenv("CHANNEL_SERVICE_URL", "http://127.0.0.1:8001/send")
+CHANNEL_SERVICE_HOST = os.getenv("CHANNEL_SERVICE_HOST")
+if CHANNEL_SERVICE_HOST:
+    CHANNEL_SERVICE_URL = f"http://{CHANNEL_SERVICE_HOST}/send"
+else:
+    CHANNEL_SERVICE_URL = os.getenv("CHANNEL_SERVICE_URL", "http://127.0.0.1:8001/send")
 
 def trigger_outbound_campaign(campaign_id: int, customer_ids: List[int], campaign_topic: str):
     db = SessionLocal()
