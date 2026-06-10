@@ -137,3 +137,16 @@ def get_segment_analytics(segment_id: int, db: Session = Depends(get_db)):
             "click_rate_pct": click_rate
         }
     }
+
+
+@router.delete("/{segment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_segment(segment_id: int, db: Session = Depends(get_db)):
+    segment = db.query(Segment).filter(Segment.id == segment_id).first()
+    if not segment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Segment not found"
+        )
+    db.delete(segment)
+    db.commit()
+    return None
