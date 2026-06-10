@@ -11,6 +11,10 @@ logger = logging.getLogger("ChannelService")
 
 app = FastAPI(title="Xeno Mock Channel Service", version="1.0.0")
 
+@app.get("/")
+def read_root():
+    return {"message": "Mock Channel Service is running."}
+
 import os
 
 CRM_BACKEND_HOST = os.getenv("CRM_BACKEND_HOST")
