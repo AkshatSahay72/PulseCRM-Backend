@@ -1,0 +1,116 @@
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+from app.core.config import settings
+import json
+import logging
+
+logger = logging.getLogger("uvicorn.error")
+
+class AIService:
+    def __init__(self):
+        try:
+            self.llm = ChatGroq(
+                groq_api_key=settings.GROQ_API_KEY,
+                model_name="llama3-8b-8192",
+                temperature=0.4
+            )
+        except Exception as e:
+            logger.error(f"Groq initialization error: {e}")
+            self.llm = None
+
+    def generate_personalized_message(self, customer_name: str, recent_orders: list, campaign_topic: str) -> str:
+        if recent_orders:
+            orders_summary = "\n".join([
+                f"- Order {o.id}: ${o.amount:.2f} ({o.status}) - {o.created_at.strftime('%Y-%m-%d')}"
+                for o in recent_orders
+            ])
+        else:
+            orders_summary = "No purchase history."
+
+        fallback = f"Hi {customer_name}! Check out our offer: {campaign_topic}."
+
+        if not self.llm:
+            return fallback
+
+        try:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", (
+                    "You are a helpful copywriter. Write a personalized, brief marketing message.\n"
+                    "Do not make up orders. Keep it under 100 words.\n"
+                    "Goal: {campaign_topic}"
+                )),
+                ("user", (
+                    "Name: {customer_name}\n"
+                    "Orders:\n{orders_summary}\n\n"
+                    "Message:"
+                ))
+            ])
+
+            chain = prompt | self.llm
+            response = chain.invoke({
+                "customer_name": customer_name,
+                "campaign_topic": campaign_topic,
+                "orders_summary": orders_summary
+            })
+            return response.content.strip()
+        except Exception as e:
+            logger.error(f"Message generation error: {e}")
+            return fallback
+
+    def generate_segment_from_prompt(self, user_prompt: str) -> dict:
+        if not self.llm:
+            raise ValueError("LLM client not configured")
+
+        system_prompt = (
+            "Translate the user query into segment rules as JSON.\n"
+            "Supported fields:\n"
+            "- 'min_spending' (float)\n"
+            "- 'max_spending' (float)\n"
+            "- 'min_orders' (int)\n\n"
+            "Response format:\n"
+            "{{\n"
+            "  \"name\": \"Segment Name\",\n"
+            "  \"description\": \"Description\",\n"
+            "  \"rules\": {{\n"
+            "    \"min_spending\": float or null,\n"
+            "    \"max_spending\": float or null,\n"
+            "    \"min_orders\": int or null\n"
+            "  }}\n"
+            "}}\n"
+            "Output only raw JSON."
+        )
+
+        try:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("user", "{user_prompt}")
+            ])
+
+            chain = prompt | self.llm
+            response = chain.invoke({"user_prompt": user_prompt})
+            
+            raw = response.content.strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                raw = "\n".join(lines).strip()
+                
+            data = json.loads(raw)
+            raw_rules = data.get("rules", {})
+            
+            valid_keys = ["min_spending", "max_spending", "min_orders"]
+            rules = {k: v for k, v in raw_rules.items() if k in valid_keys and v is not None}
+            
+            return {
+                "name": data.get("name", "Custom Segment"),
+                "description": data.get("description", ""),
+                "rules": rules
+            }
+        except Exception as e:
+            logger.error(f"Segment generation error: {e}")
+            raise ValueError(f"Could not parse query: {e}")
+
+ai_service = AIService()

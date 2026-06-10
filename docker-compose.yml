@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  crm-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - CHANNEL_SERVICE_URL=http://channel-service:8001/send
+    depends_on:
+      - channel-service
+
+  channel-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.channel
+    ports:
+      - "8001:8001"
+    environment:
+      - CRM_CALLBACK_URL=http://crm-backend:8000/api/v1/campaigns/callback
