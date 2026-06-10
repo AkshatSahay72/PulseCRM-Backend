@@ -72,7 +72,7 @@ def send_email_via_brevo(recipient_email: str, message_text: str) -> bool:
     payload = {
         "sender": {
             "name": "PulseCRM Team",
-            "email": "support@pulsecrm.com"
+            "email": "akisahay27@gmail.com"
         },
         "to": [
             {
