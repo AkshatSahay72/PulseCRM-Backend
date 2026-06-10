@@ -11,7 +11,7 @@ class AIService:
         try:
             self.llm = ChatGroq(
                 groq_api_key=settings.GROQ_API_KEY,
-                model_name="llama3-8b-8192",
+                model_name="llama-3.1-8b-instant",
                 temperature=0.4
             )
         except Exception as e:
