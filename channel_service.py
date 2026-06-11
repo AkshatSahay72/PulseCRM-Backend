@@ -111,8 +111,11 @@ def simulate_delivery_lifecycle(log_id: int, recipient: str, channel: str, messa
         
         is_success = False
         if channel == "email" and os.getenv("BREVO_API_KEY"):
+            logger.info(f"Log {log_id}: Dispatching email to {recipient} via Brevo API...")
             is_success = send_email_via_brevo(recipient, message)
         else:
+            reason = "Channel is not email" if channel != "email" else "BREVO_API_KEY env variable is not set"
+            logger.info(f"Log {log_id}: Simulating delivery locally. (Reason: {reason})")
             # Fallback to local mock simulation
             is_success = random.random() < 0.90
         
