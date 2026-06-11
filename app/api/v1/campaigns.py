@@ -249,3 +249,30 @@ def get_campaign_analytics(campaign_id: int, db: Session = Depends(get_db)):
             "click_rate_pct": click_rate
         }
     }
+
+
+@router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_campaign(campaign_id: int, db: Session = Depends(get_db)):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+    db.delete(campaign)
+    db.commit()
+    return None
+
+
+@router.post("/ai-copilot", status_code=status.HTTP_200_OK)
+def campaign_ai_copilot(goal: str = Query(...)):
+    try:
+        recommendation = ai_service.generate_copilot_recommendation(goal)
+        return recommendation
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+

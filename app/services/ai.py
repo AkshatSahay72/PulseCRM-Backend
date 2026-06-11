@@ -113,4 +113,72 @@ class AIService:
             logger.error(f"Segment generation error: {e}")
             raise ValueError(f"Could not parse query: {e}")
 
+    def generate_copilot_recommendation(self, business_goal: str) -> dict:
+        if not self.llm:
+            raise ValueError("LLM client not configured")
+
+        system_prompt = (
+            "You are a growth marketing agent. The user will provide a business goal.\n"
+            "Analyze the goal and recommend a complete marketing strategy.\n"
+            "Identify the target audience segment, segment rules, subject line, message copy, and recommended channel.\n\n"
+            "Supported segment rules fields:\n"
+            "- 'min_spending' (float)\n"
+            "- 'max_spending' (float)\n"
+            "- 'min_orders' (int)\n\n"
+            "Supported channels: 'email', 'sms', 'whatsapp'\n\n"
+            "Response format MUST be a single raw JSON block:\n"
+            "{{\n"
+            "  \"segment_name\": \"Segment Name\",\n"
+            "  \"segment_rules\": {{\n"
+            "    \"min_spending\": float or null,\n"
+            "    \"max_spending\": float or null,\n"
+            "    \"min_orders\": int or null\n"
+            "  }},\n"
+            "  \"campaign_name\": \"Suggested Campaign Title\",\n"
+            "  \"subject\": \"Email subject line (use only if email, else null)\",\n"
+            "  \"message_template\": \"Personalized message copy. Use {first_name} for first name interpolation. Keep it brief and relevant to the goal.\",\n"
+            "  \"channel\": \"email\" or \"sms\" or \"whatsapp\",\n"
+            "  \"reasoning\": \"Brief explanation of why this target segment and copywriting angle fits the business goal.\"\n"
+            "}}\n"
+            "Do not include any formatting text, other content or markdown codeblocks. Return only raw JSON."
+        )
+
+        try:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_prompt),
+                ("user", "{business_goal}")
+            ])
+
+            chain = prompt | self.llm
+            response = chain.invoke({"business_goal": business_goal})
+            
+            raw = response.content.strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                raw = "\n".join(lines).strip()
+                
+            data = json.loads(raw)
+            
+            # Clean segment rules
+            raw_rules = data.get("segment_rules", {})
+            valid_keys = ["min_spending", "max_spending", "min_orders"]
+            rules = {k: v for k, v in raw_rules.items() if k in valid_keys and v is not None}
+            
+            return {
+                "segment_name": data.get("segment_name", "Target Audience"),
+                "segment_rules": rules,
+                "campaign_name": data.get("campaign_name", "Recommended Campaign"),
+                "subject": data.get("subject", "Exclusive Offer"),
+                "message_template": data.get("message_template", "Hi {first_name}! Check out our offer."),
+                "channel": data.get("channel", "email"),
+                "reasoning": data.get("reasoning", "Recommended based on your goal.")
+            }
+        except Exception as e:
+            logger.error(f"Copilot strategy generation error: {e}")
+            raise ValueError(f"Could not parse query: {e}")
+
 ai_service = AIService()
