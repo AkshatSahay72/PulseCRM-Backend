@@ -136,7 +136,7 @@ class AIService:
             "  }},\n"
             "  \"campaign_name\": \"Suggested Campaign Title\",\n"
             "  \"subject\": \"Email subject line (use only if email, else null)\",\n"
-            "  \"message_template\": \"Personalized message copy. Use {first_name} for first name interpolation. Keep it brief and relevant to the goal.\",\n"
+            "  \"message_template\": \"Personalized message copy. Use {{first_name}} for first name interpolation. Keep it brief and relevant to the goal.\",\n"
             "  \"channel\": \"email\" or \"sms\" or \"whatsapp\",\n"
             "  \"reasoning\": \"Brief explanation of why this target segment and copywriting angle fits the business goal.\"\n"
             "}}\n"
