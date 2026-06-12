@@ -1,6 +1,5 @@
 import logging
-import httpx
-from typing import List
+from typing import List, Optional
 import os
 import random
 import time
@@ -12,73 +11,12 @@ from app.models.customer import Customer
 from app.models.order import Order
 from app.models.campaign import Campaign, CommunicationLog, CampaignEvent
 from app.services.ai import ai_service
+from app.services.email import email_service
 
 # Load env variables
 load_dotenv()
 
 logger = logging.getLogger("uvicorn.error")
-
-def send_email_via_brevo(recipient_email: str, message_text: str) -> bool:
-    api_key = os.getenv("BREVO_API_KEY")
-    if not api_key:
-        logger.warning("BREVO_API_KEY not set in environment. Simulating delivery locally.")
-        return False
-
-    test_emails = ["akisahay27@gmail.com", "akiisahay18@gmail.com"]
-    target_email = recipient_email
-    if recipient_email not in test_emails:
-        # Default to akisahay27@gmail.com for trial purposes
-        target_email = test_emails[0]
-        logger.info(f"Trial mode: Redirecting email from {recipient_email} to {target_email}")
-
-    url = "https://api.brevo.com/v3/smtp/email"
-    headers = {
-        "accept": "application/json",
-        "api-key": api_key,
-        "content-type": "application/json"
-    }
-
-    # Convert plain text to simple HTML (replace newlines with br)
-    html_content = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-            <h2 style="color: #2563eb; margin-top: 0;">PulseCRM Campaign Outbound</h2>
-            <p style="font-size: 16px; white-space: pre-wrap;">{message_text}</p>
-            <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
-            <p style="font-size: 12px; color: #888888; margin-bottom: 0;">Sent via PulseCRM Campaign Engine.</p>
-        </div>
-    </body>
-    </html>
-    """
-
-    payload = {
-        "sender": {
-            "name": "PulseCRM Team",
-            "email": "akisahay27@gmail.com"
-        },
-        "to": [
-            {
-                "email": target_email,
-                "name": target_email.split("@")[0]
-            }
-        ],
-        "subject": "Exclusive PulseCRM Campaign Offer",
-        "htmlContent": html_content
-    }
-
-    try:
-        with httpx.Client() as client:
-            response = client.post(url, headers=headers, json=payload)
-            if response.status_code in [200, 201, 202]:
-                logger.info(f"Successfully sent email to {target_email} via Brevo. Status: {response.status_code}")
-                return True
-            else:
-                logger.error(f"Brevo API error: {response.status_code} - {response.text}")
-                return False
-    except Exception as e:
-        logger.error(f"Error sending email via Brevo: {e}")
-        return False
 
 def add_campaign_event(db, log_id: int, event_type: str):
     # Check for duplicate events
@@ -94,7 +32,7 @@ def add_campaign_event(db, log_id: int, event_type: str):
         db.add(event)
         db.commit()
 
-def process_delivery_lifecycle(log_id: int, recipient: str, channel: str, message: str):
+def process_delivery_lifecycle(log_id: int, recipient: str, channel: str, message: str, subject: Optional[str] = None):
     db = SessionLocal()
     try:
         # --- PHASE 1: Delivery status ---
@@ -104,7 +42,26 @@ def process_delivery_lifecycle(log_id: int, recipient: str, channel: str, messag
         api_key = os.getenv("BREVO_API_KEY")
         if channel == "email" and api_key:
             logger.info(f"Log {log_id}: Dispatching email to {recipient} via Brevo API...")
-            is_success = send_email_via_brevo(recipient, message)
+            # Convert plain text to simple HTML (replace newlines with br)
+            html_content = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                    <h2 style="color: #2563eb; margin-top: 0;">PulseCRM Campaign Outbound</h2>
+                    <p style="font-size: 16px; white-space: pre-wrap;">{message}</p>
+                    <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
+                    <p style="font-size: 12px; color: #888888; margin-bottom: 0;">Sent via PulseCRM Campaign Engine.</p>
+                </div>
+            </body>
+            </html>
+            """
+            res = email_service.sendEmail(
+                recipient_email=recipient,
+                subject=subject or "Exclusive PulseCRM Campaign Offer",
+                html_content=html_content,
+                text_content=message
+            )
+            is_success = res.get("success", False)
         else:
             reason = "Channel is not email" if channel != "email" else "BREVO_API_KEY env variable is not set"
             logger.info(f"Log {log_id}: Simulating delivery locally. (Reason: {reason})")
@@ -165,6 +122,7 @@ def trigger_outbound_campaign(campaign_id: int, customer_ids: List[int], campaig
         db.commit()
 
         sent_count = 0
+        campaign_subject = campaign.subject or "Exclusive PulseCRM Campaign Offer"
         
         for cid in customer_ids:
             customer = db.query(Customer).filter(Customer.id == cid).first()
@@ -195,7 +153,7 @@ def trigger_outbound_campaign(campaign_id: int, customer_ids: List[int], campaig
             # Spin up the background thread to handle delivery and database event logging
             t = threading.Thread(
                 target=process_delivery_lifecycle,
-                args=(log.id, recipient, channel, msg)
+                args=(log.id, recipient, channel, msg, campaign_subject)
             )
             t.start()
             sent_count += 1

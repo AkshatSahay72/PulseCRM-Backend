@@ -17,6 +17,7 @@ def read_root():
 
 import os
 from dotenv import load_dotenv
+from app.services.email import email_service
 
 # Try loading .env from current directory or Frontend directory
 load_dotenv()
@@ -35,68 +36,6 @@ class OutboundMessage(BaseModel):
     message: str
     channel: str # sms, whatsapp, email
 
-def send_email_via_brevo(recipient_email: str, message_text: str) -> bool:
-    api_key = os.getenv("BREVO_API_KEY")
-    if not api_key:
-        logger.warning("BREVO_API_KEY not set in environment. Simulating delivery locally.")
-        return False
-
-    test_emails = ["akisahay27@gmail.com", "akiisahay18@gmail.com"]
-    target_email = recipient_email
-    if recipient_email not in test_emails:
-        # Default to akisahay27@gmail.com for trial purposes
-        target_email = test_emails[0]
-        logger.info(f"Trial mode: Redirecting email from {recipient_email} to {target_email}")
-
-    url = "https://api.brevo.com/v3/smtp/email"
-    headers = {
-        "accept": "application/json",
-        "api-key": api_key,
-        "content-type": "application/json"
-    }
-
-    # Convert plain text to simple HTML (replace newlines with br)
-    html_content = f"""
-    <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-            <h2 style="color: #2563eb; margin-top: 0;">PulseCRM Campaign Outbound</h2>
-            <p style="font-size: 16px; white-space: pre-wrap;">{message_text}</p>
-            <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
-            <p style="font-size: 12px; color: #888888; margin-bottom: 0;">Sent via PulseCRM Campaign Engine.</p>
-        </div>
-    </body>
-    </html>
-    """
-
-    payload = {
-        "sender": {
-            "name": "PulseCRM Team",
-            "email": "akisahay27@gmail.com"
-        },
-        "to": [
-            {
-                "email": target_email,
-                "name": target_email.split("@")[0]
-            }
-        ],
-        "subject": "Exclusive PulseCRM Campaign Offer",
-        "htmlContent": html_content
-    }
-
-    try:
-        with httpx.Client() as client:
-            response = client.post(url, headers=headers, json=payload)
-            if response.status_code in [200, 201, 202]:
-                logger.info(f"Successfully sent email to {target_email} via Brevo. Status: {response.status_code}")
-                return True
-            else:
-                logger.error(f"Brevo API error: {response.status_code} - {response.text}")
-                return False
-    except Exception as e:
-        logger.error(f"Error sending email via Brevo: {e}")
-        return False
-
 def simulate_delivery_lifecycle(log_id: int, recipient: str, channel: str, message: str):
     client = httpx.Client()
     try:
@@ -106,7 +45,25 @@ def simulate_delivery_lifecycle(log_id: int, recipient: str, channel: str, messa
         is_success = False
         if channel == "email" and os.getenv("BREVO_API_KEY"):
             logger.info(f"Log {log_id}: Dispatching email to {recipient} via Brevo API...")
-            is_success = send_email_via_brevo(recipient, message)
+            html_content = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                    <h2 style="color: #2563eb; margin-top: 0;">PulseCRM Campaign Outbound</h2>
+                    <p style="font-size: 16px; white-space: pre-wrap;">{message}</p>
+                    <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;">
+                    <p style="font-size: 12px; color: #888888; margin-bottom: 0;">Sent via PulseCRM Campaign Engine.</p>
+                </div>
+            </body>
+            </html>
+            """
+            res = email_service.sendEmail(
+                recipient_email=recipient,
+                subject="Exclusive PulseCRM Campaign Offer",
+                html_content=html_content,
+                text_content=message
+            )
+            is_success = res.get("success", False)
         else:
             reason = "Channel is not email" if channel != "email" else "BREVO_API_KEY env variable is not set"
             logger.info(f"Log {log_id}: Simulating delivery locally. (Reason: {reason})")
